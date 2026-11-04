@@ -1,8 +1,6 @@
 # GEX SPX e NDX
 
-Scatta le catene SPX e NDX dal CBOE agli orari del piano di Serafini e mostra profilo,
-livelli e struttura montata, in prezzi ES e NQ. Un solo servizio: sito e scheduler nello stesso processo, solo Python
-standard. Il metodo è in `../docs/gex_serafini.md`.
+Scatta le catene SPX e NDX dal CBOE e mostra profilo, livelli e struttura montata, in prezzi ES e NQ. Un solo servizio: sito e scheduler nello stesso processo, solo Python standard.
 
 | Scatto (New York) | Di solito a Roma | Serve per |
 |---|---|---|
