@@ -1,0 +1,6 @@
+dati/
+__pycache__/
+.claude/
+.DS_Store
+*.md
+deepcharts/
