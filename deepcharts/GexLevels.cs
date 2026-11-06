@@ -2,9 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
+using VolSysAPI;
 using VolSysAPI.Indicators;
 using VolumetricaAPI.Chart;
 using VolumetricaControls;
+using VolumetricaCore;
+using static VolSysAPI.ExternalStructure;
+using static VolSysAPI.Structure;
 
 namespace GexIndicators
 {
@@ -15,8 +19,15 @@ namespace GexIndicators
     /// </summary>
     public class GexLevels : Indicator
     {
-        public static IndicatorDescriptionBase Register() =>
-            new IndicatorDescriptionBase { Name = "GEX - Livelli" };
+        public static IndicatorDescriptionBase Register()
+        {
+            return new IndicatorDescriptionBase
+            {
+                Name = "GEX - Livelli",
+                Description = "Livelli GEX incollati dal sito.",
+                Tags = new List<string> { "GEX", "Opzioni" }
+            };
+        }
 
         [Category("Dati")]
         [DisplayName("Livelli (incolla dal sito)")]
@@ -30,7 +41,7 @@ namespace GexIndicators
 
         [Category("Aspetto")]
         [DisplayName("Posizione etichette (0-1)")]
-        [VolCustom(CategoryIndex = 1, PropertyIndex = 1, MinValue = 0, MaxValue = 1, IncrementValue = 0.05)]
+        [VolCustom(CategoryIndex = 1, PropertyIndex = 1, MinValue = 0, MaxValue = 1, IncrementValue = 0.05, DecimalPosToShow = 2)]
         public double PosizioneEtichette { get; set; } = 0.02;
 
         [Category("Aspetto")]
@@ -50,14 +61,14 @@ namespace GexIndicators
 
         public override void OnSet(bool setDefault, bool themeOverride)
         {
-            Description = "GEX";
+            string titolo = Leggi(Livelli).Titolo;
+            Description = titolo == "" ? "GEX" : titolo;
         }
 
         public override void OnLoad()
         {
             var piano = Leggi(Livelli);
             StatusMessage = Avviso(piano, VAn.SymbolName);
-            Description = piano.Titolo == "" ? "GEX" : piano.Titolo;
             foreach (var livello in piano.Righe)
                 Disegna(livello);
         }

@@ -33,16 +33,18 @@ sotto i livelli, "Riga per Deepcharts" dà il testo da copiare; l'indicatore
 `deepcharts/GexLevels.cs` lo disegna. Si fa alle 8:30 e dopo le 15:47.
 
 Una volta sola, sul PC con Deepchart:
-1. Installa il .NET 10 SDK e chiedi al supporto Deepchart il developer id e il progetto di esempio.
-2. Copia `GexLevels.cs` nella cartella `src` del progetto. Se la build non trova un tipo,
-   prendi le righe `using` da `src/Basics/SimpleMovingAverage.cs`.
-3. Compila, sostituendo il tuo id:
+1. Installa il .NET 10 SDK e chiedi al supporto Deepchart il developer id.
+2. Copia su quel PC la cartella `deepcharts` e, da lì, compila con il tuo id:
 
    ```bash
-   dotnet build src/DeepchartIndicators.csproj -p:DeepchartDevId=IL-TUO-ID
+   dotnet build GexIndicators.csproj -p:DeepchartDevId=IL-TUO-ID
    ```
 
-4. Sul grafico apri la lista indicatori, sezione Personal, e aggiungi "GEX - Livelli".
+   La DLL finisce da sola in `Documents\Deepchart\Indicators`. Se Deepchart non è in
+   `C:\Program Files\Volumetrica Trading\Deepchart\`, aggiungi `-p:DeepchartDir="D:\percorso"`.
+3. Sul grafico apri la lista indicatori, sezione Personal, e aggiungi "GEX - Livelli".
+
+Il progetto segue quello ufficiale: https://github.com/VolumetricaTrading/deepchart-indicators-api
 
 Ogni volta: incolla la riga nel parametro "Livelli". Se l'indicatore viene rifiutato, il log di
 Deepchart indica la riga e il tipo non ammesso.

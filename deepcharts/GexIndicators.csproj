@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Stesse impostazioni di src/DeepchartIndicators.csproj del repository ufficiale, senza gli esempi -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Library</OutputType>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <RootNamespace>GexIndicators</RootNamespace>
+    <AssemblyName>GexIndicators</AssemblyName>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <DeepchartDir Condition="'$(DeepchartDir)' == ''">C:\Program Files\Volumetrica Trading\Deepchart\</DeepchartDir>
+    <DeepchartLibDir>$([MSBuild]::EnsureTrailingSlash('$(DeepchartDir)'))</DeepchartLibDir>
+    <DeepchartDevId Condition="'$(DeepchartDevId)' == ''">YOUR-DEV-ID</DeepchartDevId>
+    <OutputPath Condition="'$(OutputPath)' == ''">$(UserProfile)\Documents\Deepchart\Indicators\</OutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="DeepchartDevId" Value="$(DeepchartDevId)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="VolSysAPI">
+      <HintPath>$(DeepchartLibDir)VolSysAPI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="VolumetricaCore">
+      <HintPath>$(DeepchartLibDir)VolumetricaCore.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="CheckDeepchartSettings" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(DeepchartLibDir)VolSysAPI.dll') Or !Exists('$(DeepchartLibDir)VolumetricaCore.dll')"
+           Text="VolSysAPI.dll e VolumetricaCore.dll non trovate in '$(DeepchartDir)'. Passa la cartella di Deepchart con -p:DeepchartDir=..." />
+    <Warning Condition="'$(DeepchartDevId)' == 'YOUR-DEV-ID'"
+             Text="DeepchartDevId non impostato: Deepchart non carichera' questa dll." />
+  </Target>
+</Project>
