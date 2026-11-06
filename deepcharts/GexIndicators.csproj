@@ -10,6 +10,8 @@
     <AssemblyName>GexIndicators</AssemblyName>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <GenerateDependencyFile>false</GenerateDependencyFile>
+    <!-- Le librerie di Deepchart sono solo per Windows: avviso innocuo -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup>

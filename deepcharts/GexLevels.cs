@@ -40,59 +40,82 @@ namespace GexIndicators
         public bool Etichette { get; set; } = true;
 
         [Category("Aspetto")]
-        [DisplayName("Posizione etichette (0-1)")]
-        [VolCustom(CategoryIndex = 1, PropertyIndex = 1, MinValue = 0, MaxValue = 1, IncrementValue = 0.05, DecimalPosToShow = 2)]
-        public double PosizioneEtichette { get; set; } = 0.02;
-
-        [Category("Aspetto")]
         [DisplayName("Colore long")]
-        [VolCustom(CategoryIndex = 1, PropertyIndex = 2)]
+        [VolCustom(CategoryIndex = 1, PropertyIndex = 1)]
         public ColorRef ColoreLong { get; set; } = ColorRef.FromRgb(76, 175, 80);
 
         [Category("Aspetto")]
         [DisplayName("Colore short")]
-        [VolCustom(CategoryIndex = 1, PropertyIndex = 3)]
+        [VolCustom(CategoryIndex = 1, PropertyIndex = 2)]
         public ColorRef ColoreShort { get; set; } = ColorRef.FromRgb(224, 85, 85);
 
         [Category("Aspetto")]
         [DisplayName("Colore flip e gamma massimo")]
-        [VolCustom(CategoryIndex = 1, PropertyIndex = 4)]
+        [VolCustom(CategoryIndex = 1, PropertyIndex = 3)]
         public ColorRef ColoreNeutro { get; set; } = ColorRef.FromRgb(240, 192, 64);
+
+        Piano piano;
+        readonly List<IAnnotation> linee = new List<IAnnotation>();
+        readonly List<IAnnotation> testi = new List<IAnnotation>();
+        int ultimaBarra;
 
         public override void OnSet(bool setDefault, bool themeOverride)
         {
+            // Senza almeno una chiamata l'indicatore resta sul grafico ma non disegna
+            OnEndCall = CallHandler.HistRT;
             string titolo = Leggi(Livelli).Titolo;
             Description = titolo == "" ? "GEX" : titolo;
         }
 
         public override void OnLoad()
         {
-            var piano = Leggi(Livelli);
-            StatusMessage = Avviso(piano, VAn.SymbolName);
-            foreach (var livello in piano.Righe)
-                Disegna(livello);
+            piano = Leggi(Livelli);
+            linee.Clear();
+            testi.Clear();
+            ultimaBarra = -1;
+            StatusMessage = Avviso(piano, VAn.SymbolName) ?? "GEX: " + piano.Righe.Count + " livelli letti";
         }
 
-        private void Disegna(Livello livello)
+        public override void OnEnd(bool isRt)
+        {
+            int ultima = VAn.LastIndex();
+            if (ultima == ultimaBarra)
+                return;
+            if (ultimaBarra < 0)
+                foreach (var livello in piano.Righe)
+                    Crea(livello);
+            ultimaBarra = ultima;
+
+            // La barra i sta a X = i + 1: linee su tutto il grafico, etichette a destra dell'ultima barra
+            foreach (var linea in linee)
+            {
+                linea.X = 1;
+                linea.X2 = ultima + 31;
+            }
+            foreach (var testo in testi)
+                testo.X = ultima + 3;
+        }
+
+        private void Crea(Livello livello)
         {
             ColorRef colore = livello.Tipo == "L" ? ColoreLong : livello.Tipo == "S" ? ColoreShort : ColoreNeutro;
 
-            var linea = VAn.CreateAnnotation(AnnotationType.HorizontalLine);
-            linea.X = 1;
+            var linea = VAn.CreateAnnotation(AnnotationType.Line);
             linea.Y = livello.Prezzo;
+            linea.Y2 = livello.Prezzo;
             linea.LineColor = colore;
             linea.LineWidth = 1;
-            VAn.AddAnnotation(IndVars.Ann_List, linea);
+            VAn.AddAnnotation(IndVars.FrontAnnList, linea);
+            linee.Add(linea);
 
             if (!Etichette)
                 return;
             var testo = VAn.CreateAnnotation(AnnotationType.Text);
-            testo.CoordinateXType = CoordinateTypeEnum.Relative;
-            testo.X = PosizioneEtichette;
             testo.Y = livello.Prezzo;
             testo.Text = livello.Nome;
             testo.ForeColor = colore;
-            VAn.AddAnnotation(IndVars.Ann_List, testo);
+            VAn.AddAnnotation(IndVars.FrontAnnList, testo);
+            testi.Add(testo);
         }
 
         public static string Avviso(Piano piano, string simbolo)
