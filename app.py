@@ -261,9 +261,16 @@ def pagina(q: dict) -> str:
     offset = float_o_none(q, "offset")
     alta = q.get("alta", [""])[0] == "1"
     payload = g.leggi_json(g.DATI / f)
+    senza_offset = False
     try:
-        an = g.analizza(payload, scad, offset, alta)
-    except (g.OffsetMancante, ValueError) as err:
+        try:
+            an = g.analizza(payload, scad, offset, alta)
+        except g.OffsetMancante as err:   # i dati ci sono: si mostrano in strike dell'indice
+            an = g.analizza(payload, scad, 0.0, alta)
+            an["nota_off"] = "mancante"
+            senza_offset, fut = True, sym
+            avvisi.append(f"{err} Finche' manca, i prezzi qui sotto sono strike {sym}, non del future.")
+    except ValueError as err:
         avvisi.append(str(err))
         return html_pagina(barra(None, q, files, sym, f), avvisi, stato_html(ora_ny), "", sym)
 
@@ -280,12 +287,13 @@ def pagina(q: dict) -> str:
 <div><b>{an['ts_ny'].astimezone(g.ROMA):%d/%m %H:%M}</b><span>dato CBOE a Roma, ritardo 15 min</span></div>
 </section>""")
     liv = "".join(f'<tr><td class="n">{p:.2f}</td><td>{e(n)}</td></tr>' for p, n in an["livelli"])
+    riga = "" if senza_offset else f"""<details><summary>Riga per Deepcharts</summary><textarea id="riga" readonly rows="4" aria-label="Riga per Deepcharts">{e(g.riga_deepcharts(an))}</textarea>
+<button type="button" onclick="copia(this)">Copia per Deepcharts</button></details>"""
     corpo.append(f"""<div class="due">
 <section class="pan"><h2>Profilo del gamma netto</h2><div class="grafico">{svg_profilo(an)}</div></section>
 <section class="pan"><h2>Livelli proposti ({fut})</h2><table>{liv}</table>
 <p class="nota">C e P sono picchi scelti in automatico: la scelta finale resta tua.</p>
-<details><summary>Riga per Deepcharts</summary><textarea id="riga" readonly rows="4" aria-label="Riga per Deepcharts">{e(g.riga_deepcharts(an))}</textarea>
-<button type="button" onclick="copia(this)">Copia per Deepcharts</button></details></section></div>""")
+{riga}</section></div>""")
 
     try:
         s = st.costruisci(an, gambe_es)

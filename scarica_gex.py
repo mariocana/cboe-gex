@@ -239,7 +239,9 @@ def offset_es(ops: list[dict], spot: float, ts_ny: datetime, manuale: float | No
         return manuale, "a mano"
     if live is not None:
         return live, f"calcolato dalle {sym} {scad_es} (forward - spot)"
-    prec = offset_salvato(ts_ny.date(), sym)
+    # dopo l'apertura vale anche il valore di quel giorno: la sera la CBOE tiene la data della sessione
+    aperto = ts_ny.hour * 60 + ts_ny.minute >= 9 * 60 + 30
+    prec = offset_salvato(ts_ny.date() + timedelta(days=1 if aperto else 0), sym)
     if prec is None:
         raise OffsetMancante(f"offset {ind['future']}-{sym} non disponibile: fuori sessione e nessun valore salvato. "
                              "Serve uno scarico a mercato aperto (15:30-22:00) o un offset a mano.")
