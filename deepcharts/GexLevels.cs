@@ -40,18 +40,23 @@ namespace GexIndicators
         public bool Etichette { get; set; } = true;
 
         [Category("Aspetto")]
-        [DisplayName("Colore long")]
+        [DisplayName("Prezzo nelle etichette")]
         [VolCustom(CategoryIndex = 1, PropertyIndex = 1)]
+        public bool PrezzoInEtichetta { get; set; } = true;
+
+        [Category("Aspetto")]
+        [DisplayName("Colore long")]
+        [VolCustom(CategoryIndex = 1, PropertyIndex = 2)]
         public ColorRef ColoreLong { get; set; } = ColorRef.FromRgb(76, 175, 80);
 
         [Category("Aspetto")]
         [DisplayName("Colore short")]
-        [VolCustom(CategoryIndex = 1, PropertyIndex = 2)]
+        [VolCustom(CategoryIndex = 1, PropertyIndex = 3)]
         public ColorRef ColoreShort { get; set; } = ColorRef.FromRgb(224, 85, 85);
 
         [Category("Aspetto")]
         [DisplayName("Colore flip e gamma massimo")]
-        [VolCustom(CategoryIndex = 1, PropertyIndex = 3)]
+        [VolCustom(CategoryIndex = 1, PropertyIndex = 4)]
         public ColorRef ColoreNeutro { get; set; } = ColorRef.FromRgb(240, 192, 64);
 
         Piano piano;
@@ -73,7 +78,7 @@ namespace GexIndicators
             linee.Clear();
             testi.Clear();
             ultimaBarra = -1;
-            StatusMessage = Avviso(piano, VAn.SymbolName) ?? "GEX: " + piano.Righe.Count + " livelli letti";
+            StatusMessage = Avviso(piano, VAn.SymbolName);
         }
 
         public override void OnEnd(bool isRt)
@@ -112,10 +117,17 @@ namespace GexIndicators
                 return;
             var testo = VAn.CreateAnnotation(AnnotationType.Text);
             testo.Y = livello.Prezzo;
-            testo.Text = livello.Nome;
+            testo.Text = Etichetta(livello, PrezzoInEtichetta);
             testo.ForeColor = colore;
             VAn.AddAnnotation(IndVars.FrontAnnList, testo);
             testi.Add(testo);
+        }
+
+        public static string Etichetta(Livello livello, bool conPrezzo)
+        {
+            if (!conPrezzo)
+                return livello.Nome;
+            return livello.Nome + "  " + livello.Prezzo.ToString("0.00", CultureInfo.InvariantCulture);
         }
 
         public static string Avviso(Piano piano, string simbolo)
