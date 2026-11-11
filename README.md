@@ -1,6 +1,6 @@
-# GEX SPX e NDX
+# GEX SPX
 
-Scatta le catene SPX e NDX dal CBOE e mostra profilo, livelli e struttura montata, in prezzi ES e NQ. Un solo servizio: sito e scheduler nello stesso processo, solo Python standard.
+Scatta la catena SPX dal CBOE e mostra profilo, livelli e struttura montata, in prezzi ES. Un solo servizio: sito e scheduler nello stesso processo, solo Python standard. Il codice gestisce anche NDX/NQ: gli scatti automatici sono spenti, si riaccendono con `GEX_INDICI=SPX,NDX`.
 
 | Scatto (New York) | Di solito a Roma | Serve per |
 |---|---|---|
@@ -9,10 +9,24 @@ Scatta le catene SPX e NDX dal CBOE e mostra profilo, livelli e struttura montat
 | 15:40 | 21:40 | gamma massimo verso la chiusura |
 | 16:20 | 22:20 | barre a 1 minuto della sessione, per il test |
 
-Solo dal lunedì al venerdì, per i due indici. Se uno scatto fallisce riprova ogni 3 minuti
+Solo dal lunedì al venerdì. Se uno scatto fallisce riprova ogni 3 minuti
 per mezz'ora; le barre mancate si recuperano allo scatto del mattino dopo.
 L'esito di ogni scatto è nella pagina, sotto "Scatti automatici". Nei giorni di borsa USA
 chiusa gli scatti girano lo stesso e salvano la catena invariata.
+
+## Live ogni 5 minuti
+
+In sessione (9:45–16:15 a New York, di solito 15:45–22:15 a Roma) la catena SPX si riscarica
+ogni 5 minuti. La pagina `/live` mostra:
+- prezzo, flip, gamma massimo e put più forte durante la giornata, in prezzi ES;
+- la fascia del movimento atteso: lo straddle ATM 0DTE del primo scatto attorno al prezzo di allora;
+- il profilo adesso contro quello di 30 minuti prima;
+- cosa è cambiato: il prezzo che passa dall'altra parte del flip, flip o gamma massimo che si spostano.
+
+Il dato CBOE resta ritardato di 15 minuti. Il live serve a vedere come si muovono i livelli;
+quelli da mettere su Deepcharts restano gli scatti del mattino e delle 15:47.
+Del live si tengono solo i numeri (tabelle `live` e `live_profilo`, CSV su `/live.csv`), non il
+JSON grezzo: sarebbero 2 MB ogni 5 minuti. `GEX_LIVE=0` lo spegne.
 
 ## Storico
 

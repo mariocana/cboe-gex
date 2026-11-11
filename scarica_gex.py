@@ -201,6 +201,20 @@ def profilo(ops: list[dict], scad: date, spot: float, ind: dict) -> list[tuple[f
     return [(k, call.get(k, 0.0) - put.get(k, 0.0), call.get(k, 0.0), put.get(k, 0.0)) for k in strikes]
 
 
+def straddle_atm(ops: list[dict], scad: date, spot: float, ind: dict) -> float | None:
+    """Prezzo medio dello straddle ATM della scadenza: il movimento che le opzioni si aspettano
+    da qui alla scadenza (per la 0DTE, il resto della giornata)."""
+    call, put = {}, {}
+    for o in ops:
+        if o["root"] == ind["radice"] and o["scadenza"] == scad and o["bid"] > 0 and o["ask"] > 0:
+            (call if o["tipo"] == "C" else put)[o["strike"]] = (o["bid"] + o["ask"]) / 2
+    ks = set(call) & set(put)
+    if not ks:
+        return None
+    k = min(ks, key=lambda x: abs(x - spot))
+    return round(call[k] + put[k], 2)
+
+
 def gamma_flip(prof, spot: float) -> float | None:
     """Strike dove il netto passa da negativo (sotto) a positivo; se ce n'e' piu' d'uno, il piu' vicino allo spot."""
     passaggi = [prof[i][0] for i in range(1, len(prof)) if prof[i - 1][1] < 0 <= prof[i][1]]
