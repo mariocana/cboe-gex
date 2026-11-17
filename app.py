@@ -40,6 +40,7 @@ SLOT = [("0230", "mattina, piano di giornata (8:30 a Roma)"),
 AUTOMATICI = [s for s in os.getenv("GEX_INDICI", "SPX").split(",") if s in g.INDICI] or ["SPX"]
 LIVE = [] if os.getenv("GEX_LIVE", "1") == "0" else ["SPX"]
 LIVE_OGNI = 300                      # secondi fra due scatti live
+STABILE_DA = 10 * 60                 # prima delle 10:00 NY il volume e' minimo e il flip salta
 LIVE_ORARIO = (9 * 60 + 45, 16 * 60 + 15)   # minuti a New York: il dato CBOE e' indietro di 15
 FINESTRA = timedelta(minutes=30)     # se uno scatto fallisce, riprova per mezz'ora
 PAUSA_RIPROVA = 180                  # secondi fra due tentativi
@@ -240,7 +241,7 @@ main{max-width:1180px;margin:0 auto;padding:16px}h1{font-size:20px;margin:4px 0 
 form.filtri{display:flex;flex-wrap:wrap;gap:10px;align-items:end}label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--tenue)}label.riga{flex-direction:row;align-items:center;gap:6px;padding-bottom:7px}
 select,input[type=number],button{background:#111317;color:var(--testo);border:1px solid var(--bordo);border-radius:6px;padding:6px 8px;font:inherit}input[type=number]{width:96px}button{cursor:pointer}button.primo{background:#2b5d8a;border-color:#2b5d8a}
 table{border-collapse:collapse;width:100%;font-size:14px}td,th{padding:3px 6px;border-bottom:1px solid var(--bordo);text-align:left;vertical-align:top}th{color:var(--tenue);font-weight:normal;font-size:12px}td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-.scorri{overflow-x:auto}.avviso{border-color:var(--ko)}.nota{color:var(--tenue);font-size:12px;margin:8px 0 0}.ok{color:var(--ok)}.ko{color:var(--ko)}details summary{cursor:pointer;color:var(--tenue);font-size:13px;margin-top:10px}
+tr.pre td{color:#6b737d}.scorri{overflow-x:auto}.avviso{border-color:var(--ko)}.nota{color:var(--tenue);font-size:12px;margin:8px 0 0}.ok{color:var(--ok)}.ko{color:var(--ko)}details summary{cursor:pointer;color:var(--tenue);font-size:13px;margin-top:10px}
 a{color:#7fbdf0}textarea{width:100%;background:#111317;color:var(--testo);border:1px solid var(--bordo);border-radius:6px;padding:6px;font:12px/1.4 Menlo,monospace;margin:8px 0}svg{display:block}.grafico{overflow-x:auto}.grafico svg{min-width:480px}
 """
 
@@ -428,6 +429,11 @@ def ora_ny_di(r: dict) -> datetime:
     return datetime.fromisoformat(r["ts_utc"]).replace(tzinfo=timezone.utc).astimezone(g.NY)
 
 
+def instabile(r: dict) -> bool:
+    t = ora_ny_di(r)
+    return t.hour * 60 + t.minute < STABILE_DA
+
+
 def fut(r: dict, campo: str) -> float | None:
     """Valore in prezzi ES: strike SPX + offset dello stesso scatto."""
     v = r.get(campo)
@@ -441,7 +447,7 @@ def svg_timeline(righe: list[dict]) -> str:
     t0 = giorno.replace(hour=9, minute=30, second=0, microsecond=0)
     t1 = giorno.replace(hour=16, minute=0, second=0, microsecond=0)
     X = lambda t: sx + max(0.0, min(1.0, (t - t0) / (t1 - t0))) * (W - sx - dx)
-    rif = righe[0]
+    rif = next((r for r in righe if not instabile(r)), righe[0])
     fascia = None
     if rif.get("straddle"):
         fascia = (fut(rif, "spot") - rif["straddle"], fut(rif, "spot") + rif["straddle"])
@@ -461,6 +467,9 @@ def svg_timeline(righe: list[dict]) -> str:
         t = giorno.replace(hour=h, minute=0, second=0, microsecond=0)
         el.append(f'<line x1="{X(t):.1f}" x2="{X(t):.1f}" y1="{su}" y2="{H - giu}" stroke="#2a2e35"/>'
                   f'<text x="{X(t):.1f}" y="{H - 12}" fill="#9aa3ad" font-size="11" text-anchor="middle">{t.astimezone(g.ROMA):%H:%M}</text>')
+    t_stabile = giorno.replace(hour=STABILE_DA // 60, minute=STABILE_DA % 60, second=0, microsecond=0)
+    el.append(f'<rect x="{sx}" width="{X(t_stabile) - sx:.1f}" y="{su}" height="{H - su - giu}" fill="#9aa3ad" fill-opacity="0.16"/>'
+              f'<text x="{(sx + X(t_stabile)) / 2:.1f}" y="{su + 12}" fill="#9aa3ad" font-size="10" text-anchor="middle">dati instabili</text>')
     if fascia:
         el.append(f'<rect x="{sx}" width="{W - dx - sx}" y="{Y(fascia[1]):.1f}" height="{Y(fascia[0]) - Y(fascia[1]):.1f}" '
                   f'fill="#ffffff" fill-opacity="0.05" stroke="#9aa3ad" stroke-dasharray="3 4"/>')
@@ -543,6 +552,9 @@ def scatto_di_prima(righe: list[dict], minuti: int = 30) -> dict:
 
 def novita(righe: list[dict]) -> list[str]:
     """Cosa e' cambiato: lato del flip rispetto allo scatto prima, flip e gamma max in 30 minuti."""
+    righe = [r for r in righe if not instabile(r)]
+    if not righe:
+        return []
     ult = righe[-1]
     out = []
     if len(righe) >= 2 and righe[-2]["regime"] != ult["regime"]:
@@ -591,7 +603,7 @@ def pagina_live(q: dict) -> str:
         return html_pagina(filtri, [avviso] if avviso else [], "", "", "SPX", "GEX live", testa)
 
     ult = righe[-1]
-    prima = scatto_di_prima(righe)
+    prima = scatto_di_prima([r for r in righe if not instabile(r)] or righe)
     t_ult = ora_ny_di(ult).astimezone(g.ROMA)
     em = f"±{ult['straddle']:.1f}" if ult.get("straddle") else "n.d."
     flip = fut(ult, "flip")
@@ -612,14 +624,14 @@ def pagina_live(q: dict) -> str:
                  'I livelli sono a gradini: valgono fino allo scatto dopo.</p></section>')
     t_prima = ora_ny_di(prima).astimezone(g.ROMA)
     tab = "".join(
-        f'<tr><td>{ora_ny_di(r).astimezone(g.ROMA):%H:%M}</td><td class="n">{fut(r, "spot"):.2f}</td><td>{e(r["regime"])}</td>'
+        f'<tr{" class=pre" if instabile(r) else ""}><td>{ora_ny_di(r).astimezone(g.ROMA):%H:%M}</td><td class="n">{fut(r, "spot"):.2f}</td><td>{e(r["regime"])}</td>'
         + "".join(f'<td class="n">{num_o_vuoto(fut(r, c))}</td>' for c in ("flip", "gamma_max", "put_max", "c1", "p1"))
         + f'<td class="n">{num_o_vuoto(r["straddle"], 1)}</td></tr>'
         for r in reversed(righe))
     corpo.append(f"""<div class="due">
 <section class="pan"><h2>Profilo adesso ({t_ult:%H:%M}) e alle {t_prima:%H:%M}</h2><div class="grafico">{svg_confronto(ult, prima)}</div>
 <p class="nota">Barre piene: adesso. Contorno bianco: {round((ora_ny_di(ult) - ora_ny_di(prima)).total_seconds() / 60)} minuti prima.</p></section>
-<section class="pan"><h2>Scatti del giorno</h2><div class="scorri"><table>
+<section class="pan"><h2>Scatti del giorno</h2><p class="nota" style="margin:0 0 8px">In grigio gli scatti prima delle 10:00 a New York (16:00 a Roma): volume minimo, il flip salta. Non vanno letti come segnali.</p><div class="scorri"><table>
 <tr><th>Roma</th><th>ES</th><th>Regime</th><th>Flip</th><th>Gamma max</th><th>Put max</th><th>C1</th><th>P1</th><th>Straddle</th></tr>{tab}</table></div></section>
 </div>""")
     return html_pagina(filtri, [], "", "".join(corpo), "SPX", "GEX live", testa)
