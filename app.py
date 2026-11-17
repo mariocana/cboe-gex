@@ -8,7 +8,8 @@ leggono e scrivono gli stessi file: su Railway un cron separato non vedrebbe il 
     python3 app.py                       # in locale su http://127.0.0.1:8000
     GEX_PASSWORD=... python3 app.py      # con password, ascolta su tutte le interfacce
 
-Variabili: GEX_PASSWORD (obbligatoria su Railway), PORT, GEX_DATI (cartella dei dati; su
+Variabili: GEX_PASSWORD (su Railway serve o questa o GEX_PUBBLICO=1), GEX_PUBBLICO=1 (sito
+aperto a tutti ma di sola lettura: senza password, niente "Scatta ora"), PORT, GEX_DATI (cartella dei dati; su
 Railway basta montare un volume), GEX_SCHEDULER=0 per spegnere gli scatti automatici,
 GEX_INDICI (indici degli scatti agli orari, default SPX; es. "SPX,NDX"), GEX_LIVE=0 per spegnere
 il live ogni 5 minuti.
@@ -46,6 +47,8 @@ NOME_FILE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{4}_(SPX|NDX)\.json\.gz$")
 GIORNI = ["lun", "mar", "mer", "gio", "ven", "sab", "dom"]
 PASSWORD = os.getenv("GEX_PASSWORD", "")
 SU_RAILWAY = bool(os.getenv("RAILWAY_SERVICE_ID"))
+PUBBLICO = os.getenv("GEX_PUBBLICO") == "1"
+SOLA_LETTURA = PUBBLICO and not PASSWORD   # aperto a tutti: nessuno puo' far partire scarichi
 
 blocco = threading.Lock()
 
@@ -291,7 +294,8 @@ def pagina(q: dict) -> str:
         avvisi.append("L'ultimo scatto automatico e' fallito: vedi il dettaglio qui sotto.")
 
     if not files:
-        avvisi.append("Nessuno scarico ancora: usa \"Scatta ora\" o aspetta il prossimo orario.")
+        avvisi.append("Nessuno scarico ancora: aspetta il prossimo orario." if SOLA_LETTURA
+                      else "Nessuno scarico ancora: usa \"Scatta ora\" o aspetta il prossimo orario.")
         return html_pagina(barra(None, q, [], sym), avvisi, stato_html(ora_ny), "", sym)
 
     f = q.get("f", [files[0]])[0]
@@ -387,7 +391,7 @@ def barra(an: dict | None, q: dict, files: list[str], sym: str, f: str = "") -> 
 <label class="riga"><input type="checkbox" name="alta" value="1"{alta}>Alta volatilita' ({punti} punti)</label>
 <button class="primo" type="submit">Aggiorna</button></form>
 <div style="display:flex;gap:10px;align-items:center"><a href="/live">Live</a><a href="/storico">Storico</a>
-<form method="post" action="/scatta?i={sym}"><button type="submit">Scatta ora</button></form></div></div>"""
+{"" if SOLA_LETTURA else f'<form method="post" action="/scatta?i={sym}"><button type="submit">Scatta ora</button></form>'}</div></div>"""
 
 
 def pagina_storico() -> str:
@@ -684,6 +688,8 @@ class Gestore(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         if not self.autorizzato():
             return
+        if SOLA_LETTURA:
+            return self.rispondi(403, "Sito di sola lettura", "text/plain; charset=utf-8")
         url = urlsplit(self.path)
         if url.path != "/scatta":
             return self.rispondi(404, "Pagina non trovata", "text/plain; charset=utf-8")
@@ -709,9 +715,10 @@ class Gestore(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    if SU_RAILWAY and not PASSWORD:
-        sys.exit("GEX_PASSWORD non impostata: su Railway il sito non parte senza password.")
-    host = "0.0.0.0" if PASSWORD else "127.0.0.1"
+    if SU_RAILWAY and not PASSWORD and not PUBBLICO:
+        sys.exit("GEX_PASSWORD non impostata: su Railway il sito non parte senza password. "
+                 "Per un sito aperto di sola lettura imposta GEX_PUBBLICO=1.")
+    host = "0.0.0.0" if PASSWORD or PUBBLICO else "127.0.0.1"
     porta = int(os.getenv("PORT", "8000"))
     fatti, falliti = storico.ricostruisci()   # recupera gli scarichi non ancora nello storico
     print(f"storico: {fatti} scarichi recuperati, {len(falliti)} non riusciti", flush=True)

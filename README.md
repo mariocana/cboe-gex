@@ -96,6 +96,9 @@ Gli script da terminale `scarica_gex.py` e `struttura.py` funzionano ancora.
 
 3. Nel dashboard del servizio:
    - **Variables**: aggiungi `GEX_PASSWORD`. Senza, il servizio non parte.
+     In alternativa `GEX_PUBBLICO=1` (e niente password): il sito è aperto a tutti ma di sola
+     lettura, il pulsante "Scatta ora" sparisce e gli scatti li fa solo lo scheduler. Chiunque
+     conosca l'indirizzo vede livelli, live e storico e può scaricare `gex.db`.
    - **Volume**: collegane uno con mount path `/data`. Senza, ogni deploy cancella gli
      scarichi, e la pagina lo segnala. Il percorso viene letto da solo.
    - **Settings → Networking**: genera il dominio pubblico.
