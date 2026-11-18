@@ -345,7 +345,9 @@ def riga_deepcharts(an: dict) -> str:
         uniti.setdefault(prezzo, []).append(nome)
     righe = [f"{p:.2f};{' / '.join(nomi).replace(';', ',').replace('|', ',')};{tipo_livello(nomi[0])}"
              for p, nomi in uniti.items()]
-    return "|".join([testa] + righe)
+    # il profilo del gamma netto per strike, per la modalita' a barre: prezzo;valore;B
+    barre = [f"{k + an['off']:.2f};{n:.1f};B" for k, n, _, _ in an["prof"]]
+    return "|".join([testa] + righe + barre)
 
 
 def main() -> None:
