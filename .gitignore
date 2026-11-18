@@ -2,3 +2,5 @@ dati/
 __pycache__/
 .claude/
 .DS_Store
+obj/
+bin/
