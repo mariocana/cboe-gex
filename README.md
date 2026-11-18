@@ -69,6 +69,13 @@ Una volta sola, sul PC con Deepchart:
 
 Il progetto segue quello ufficiale: https://github.com/VolumetricaTrading/deepchart-indicators-api
 
+Due modi, nelle impostazioni dell'indicatore (sezione Profilo):
+- predefinito: una linea per livello, con la sua etichetta;
+- "Modo profilo": una barra orizzontale per strike (verde gamma netto positivo, rosso negativo),
+  come il grafico del sito, con le etichette dei livelli accanto. Larghezza e spessore si
+  regolano; se le barre si toccano o sono troppo sottili, cambia lo spessore.
+La riga del sito contiene già il profilo (segmenti `prezzo;valore;B`), quindi vale per entrambi.
+
 Ogni volta: incolla la riga nel parametro "Livelli". Se l'indicatore viene rifiutato, il log di
 Deepchart indica la riga e il tipo non ammesso.
 
