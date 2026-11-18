@@ -201,6 +201,22 @@ def profilo(ops: list[dict], scad: date, spot: float, ind: dict) -> list[tuple[f
     return [(k, call.get(k, 0.0) - put.get(k, 0.0), call.get(k, 0.0), put.get(k, 0.0)) for k in strikes]
 
 
+def oi_strike(ops: list[dict], scad: date, spot: float, ind: dict) -> list[tuple[float, float, float]]:
+    """[(strike, OI call, OI put)] sugli stessi 51 strike del profilo. Open interest grezzo,
+    senza gamma e senza volume: cambia una volta sola, di notte, quindi non si sposta col prezzo."""
+    passo = ind["passo"]
+    atm = round(spot / passo) * passo
+    lo, hi = atm - N_STRIKE * passo, atm + N_STRIKE * passo
+    call, put = {}, {}
+    for o in ops:
+        k = round(o["strike"] / passo) * passo
+        if o["root"] != ind["radice"] or o["scadenza"] != scad or k < lo or k > hi:
+            continue
+        d = call if o["tipo"] == "C" else put
+        d[k] = d.get(k, 0.0) + o["oi"]
+    return [(k, call.get(k, 0.0), put.get(k, 0.0)) for k in sorted(set(call) | set(put))]
+
+
 def straddle_atm(ops: list[dict], scad: date, spot: float, ind: dict) -> float | None:
     """Prezzo medio dello straddle ATM della scadenza: il movimento che le opzioni si aspettano
     da qui alla scadenza (per la 0DTE, il resto della giornata)."""

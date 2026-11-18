@@ -35,6 +35,11 @@ Ogni scatto finisce in due posti, nella stessa cartella dati:
 - `gex.db`: database SQLite con scatti, livelli e profilo per strike (0DTE e settimanale) e
   barre a 1 minuto. La vista `livelli_future` dà i livelli in prezzi ES e NQ.
 
+La tabella `oi_strike` (e la vista `oi_future`, in prezzi ES) tiene l'open interest grezzo di call
+e put sugli stessi 51 strike: serve a provare dei livelli che non si spostano col prezzo (call e
+put wall), da confrontare con i livelli gamma. Dopo il deploy, `python3 storico.py --tutto`
+la riempie anche per gli scatti già salvati sul volume.
+
 Il database si ricalcola dai JSON con `python3 storico.py --tutto`, per esempio se cambiano
 le regole dei livelli. Dal sito, la pagina Storico mostra gli ultimi scatti e permette di
 scaricare il CSV e il database completo. Il volume Railway non è un backup: ogni tanto
@@ -56,6 +61,10 @@ Una volta sola, sul PC con Deepchart:
 
    La DLL finisce da sola in `Documents\Deepchart\Indicators`. Se Deepchart non è in
    `C:\Program Files\Volumetrica Trading\Deepchart\`, aggiungi `-p:DeepchartDir="D:\percorso"`.
+   Se Windows gira su Parallels, Documenti di Windows è quello del Mac: la cartella vera è
+   `C:\Mac\Home\Documents\Deepchart\Indicators`, mentre il build di default scrive in
+   `C:\Users\<nome>\Documents`, che Deepchart non legge. Aggiungi
+   `-p:OutputPath="C:\Mac\Home\Documents\Deepchart\Indicators\"` e riavvia Deepchart.
 3. Sul grafico apri la lista indicatori, sezione Personal, e aggiungi "GEX - Livelli".
 
 Il progetto segue quello ufficiale: https://github.com/VolumetricaTrading/deepchart-indicators-api

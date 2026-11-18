@@ -11,10 +11,13 @@ Tabelle:
     livelli  una riga per scarico e scadenza (0DTE e settimanale): strike SPX di flip,
              gamma massimo, C1-C3, P1-P3
     profilo  il gamma netto strike per strike
+    oi_strike  l'open interest grezzo (call e put) sugli stessi strike, per i livelli che non
+             si spostano col prezzo
     barre    le barre a 1 minuto della sessione cash, per misurare cosa ha fatto il prezzo
     live     ogni 5 minuti in sessione (solo SPX, 0DTE): spot, offset, flip, gamma massimo,
              C/P e straddle ATM. Il JSON grezzo qui non si tiene (2 MB a scatto)
     live_profilo  il gamma netto 0DTE di ogni scatto live
+    oi_future (vista)  l'open interest per strike in prezzi ES/NQ
     livelli_future (vista)  i livelli gia' in prezzi ES/NQ; vuoti finche' l'offset non c'e'
 """
 import argparse
@@ -40,6 +43,10 @@ CREATE TABLE IF NOT EXISTS profilo (
     file TEXT NOT NULL, scadenza TEXT NOT NULL, strike REAL NOT NULL,
     netto REAL, gex_call REAL, gex_put REAL,
     PRIMARY KEY (file, scadenza, strike));
+CREATE TABLE IF NOT EXISTS oi_strike (
+    file TEXT NOT NULL, scadenza TEXT NOT NULL, strike REAL NOT NULL,
+    oi_call REAL, oi_put REAL,
+    PRIMARY KEY (file, scadenza, strike));
 CREATE TABLE IF NOT EXISTS barre (
     indice TEXT NOT NULL, ts_ny TEXT NOT NULL, open REAL, high REAL, low REAL, close REAL,
     PRIMARY KEY (indice, ts_ny));
@@ -58,6 +65,10 @@ SELECT s.indice, s.data_ny, s.ora_roma, s.ts_utc, s.in_sessione, s.spot, s.offse
        l.p1 + s.offset AS p1, l.p2 + s.offset AS p2, l.p3 + s.offset AS p3,
        l.netto_totale, s.file
 FROM livelli l JOIN scatti s USING (file);
+CREATE VIEW IF NOT EXISTS oi_future AS
+SELECT s.indice, s.data_ny, s.ora_roma, s.in_sessione, o.scadenza, o.strike + s.offset AS prezzo_future,
+       o.oi_call, o.oi_put, o.oi_call + o.oi_put AS oi_totale, s.file
+FROM oi_strike o JOIN scatti s USING (file);
 """
 
 
@@ -87,7 +98,7 @@ def registra(nome: str, payload: dict) -> None:
     ora_roma = an["ts_ny"].astimezone(g.ROMA)
     db = apri()
     with db:
-        for t in ("profilo", "livelli", "scatti"):
+        for t in ("oi_strike", "profilo", "livelli", "scatti"):
             db.execute(f"DELETE FROM {t} WHERE file = ?", (nome,))
         db.execute("INSERT INTO scatti VALUES (?,?,?,?,?,?,?,?,?)",
                    (nome, an["sym"], an["ts_cboe"], an["ts_ny"].date().isoformat(), f"{ora_roma:%Y-%m-%d %H:%M}",
@@ -100,6 +111,9 @@ def registra(nome: str, payload: dict) -> None:
                         *c, *p, sum(r[1] for r in v["prof"])))
             db.executemany("INSERT INTO profilo VALUES (?,?,?,?,?,?)",
                            [(nome, v["scad"].isoformat(), k, n, gc, gp) for k, n, gc, gp in v["prof"]])
+            db.executemany("INSERT INTO oi_strike VALUES (?,?,?,?,?)",
+                           [(nome, v["scad"].isoformat(), k, oc, op)
+                            for k, oc, op in g.oi_strike(v["ops"], v["scad"], v["spot"], v["ind"])])
     db.close()
 
 
