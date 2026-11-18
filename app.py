@@ -40,6 +40,7 @@ SLOT = [("0230", "mattina, piano di giornata (8:30 a Roma)"),
 AUTOMATICI = [s for s in os.getenv("GEX_INDICI", "SPX").split(",") if s in g.INDICI] or ["SPX"]
 LIVE = [] if os.getenv("GEX_LIVE", "1") == "0" else ["SPX"]
 LIVE_OGNI = 300                      # secondi fra due scatti live
+LIVE_REFRESH = 60                    # secondi fra due ricaricamenti della pagina /live
 STABILE_DA = 10 * 60                 # prima delle 10:00 NY il volume e' minimo e il flip salta
 LIVE_ORARIO = (9 * 60 + 45, 16 * 60 + 15)   # minuti a New York: il dato CBOE e' indietro di 15
 FINESTRA = timedelta(minutes=30)     # se uno scatto fallisce, riprova per mezz'ora
@@ -596,7 +597,15 @@ def pagina_live(q: dict) -> str:
               f'<div style="display:flex;gap:10px;align-items:center"><a href="/">Livelli</a><a href="/storico">Storico</a>'
               f'<a href="/live.csv">CSV</a></div></div><p class="nota">{e(spiega)}</p>')
     oggi = giorno == f"{ora_ny:%Y-%m-%d}"
-    testa = '<meta http-equiv="refresh" content="120">' if attivo and (oggi or not giorni) else ""
+    auto = attivo and (oggi or not giorni)
+    testa = ('<script>addEventListener("DOMContentLoaded",()=>{const c=document.getElementById("cd"),'
+             'p=document.getElementById("pausa");if(!c)return;let n=%d;setInterval(()=>{if(p&&p.checked)return;'
+             'n--;c.textContent=n;if(n<=0)location.reload()},1000)})</script>' % LIVE_REFRESH) if auto else ""
+    adesso = datetime.now(g.ROMA)
+    stato_ar = (f' &middot; aggiornamento automatico ogni {LIVE_REFRESH} s, prossimo tra <b id="cd">{LIVE_REFRESH}</b> s '
+                '<label class="riga"><input type="checkbox" id="pausa"> pausa</label>' if auto
+                else " &middot; aggiornamento automatico fermo (fuori orario o giorno passato)")
+    filtri += f'<p class="nota" id="ar">Pagina aggiornata alle {adesso:%H:%M:%S} (Roma){stato_ar}</p>'
     righe = storico.live_del_giorno(giorno) if giorno else []
     if not righe:
         avviso = "Nessuno scatto live ancora: il primo arriva all'apertura di Wall Street." if LIVE else ""
