@@ -21,6 +21,27 @@ Il sito del CBOE ha un'alternativa con lo stesso formato, `www-api.cboe.com/dela
 `scarica_gex.py` prova prima quella e poi gli indirizzi `cdn-api`. Le barre a 1 minuto usano `.../chart/%5ESPX/intraday`
 (non ancora verificato: se lo scatto delle 22:20 fallisce, controllare l'indirizzo e la forma della risposta).
 
+## Controllo dei feed
+
+Ogni scarico segna se il CBOE ha risposto (file `feed.json` nella cartella dati). Dopo 3 errori di fila
+(5-10 minuti in sessione), oppure se in sessione non arriva nessun dato nuovo da 20 minuti:
+- su **tutte le pagine** compare un riquadro rosso con l'ora di inizio, l'errore e l'ultimo dato buono;
+- `/stato` risponde **503** con il testo del problema (200 "ok" altrimenti). `/health` resta sempre 200,
+  perché lo usa Railway per riavviare il servizio e un riavvio non sistema un feed bloccato;
+- se imposti `GEX_TELEGRAM_TOKEN` (il token del tuo bot, vedi sotto) il bot ti scrive su Telegram: una volta
+  quando parte il problema, una volta alla ripresa, e un promemoria ogni ora finché dura.
+
+Telegram, una volta sola:
+1. Su Telegram scrivi a `@BotFather`, comando `/newbot`, scegli un nome: ti dà il **token**.
+2. Su Railway aggiungi la variabile `GEX_TELEGRAM_TOKEN` con quel token (non scriverlo in nessun file).
+3. Apri il tuo nuovo bot e scrivigli un messaggio qualsiasi (per esempio `ciao`).
+Al primo avviso il sito prende la chat che ha scritto per prima e la tiene. Se vuoi essere sicuro del destinatario,
+imposta anche `GEX_TELEGRAM_CHAT` con il tuo id di chat.
+
+Per i fine settimana e la notte (quando lo scheduler non lavora) l'avviso resta finché non arriva un dato buono.
+In più, conviene un monitor esterno gratuito (per esempio UptimeRobot) che chiama ogni 5 minuti
+`https://TUO-SITO/stato` e ti scrive o ti notifica quando risponde 503, anche se il servizio è fermo del tutto.
+
 ## Live ogni 5 minuti
 
 In sessione (9:45–16:15 a New York, di solito 15:45–22:15 a Roma) la catena SPX si riscarica

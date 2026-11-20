@@ -76,7 +76,18 @@ def _get(url: str) -> dict:
         return json.loads(r.read())
 
 
-def _get_uno(indirizzi: list[str], sym: str) -> dict:
+ESITO = None   # gancio: l'app lo imposta per sapere se i feed rispondono (quale, ok, messaggio)
+
+
+def _esito(quale: str, ok: bool, msg: str = "") -> None:
+    if ESITO:
+        try:
+            ESITO(quale, ok, msg)
+        except Exception:
+            pass
+
+
+def _get_uno(indirizzi: list[str], sym: str, quale: str = "opzioni") -> dict:
     primo = None
     for url in indirizzi:
         try:
@@ -85,8 +96,10 @@ def _get_uno(indirizzi: list[str], sym: str) -> dict:
             primo = primo or err
             continue
         if payload.get("success", True) and payload.get("data"):
+            _esito(quale, True)
             return payload
         primo = primo or ValueError(f"risposta vuota da {url.split('/')[2]}")
+    _esito(quale, False, f"{sym}: {primo}")
     raise primo
 
 
@@ -96,7 +109,7 @@ def scarica(sym: str = "SPX") -> dict:
 
 def scarica_barre(sym: str) -> dict:
     """Barre a 1 minuto dell'ultima sessione cash (orario di New York)."""
-    return _get_uno(URL_BARRE, sym)
+    return _get_uno(URL_BARRE, sym, "barre")
 
 
 def indice_di(payload: dict) -> str:

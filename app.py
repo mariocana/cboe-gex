@@ -24,6 +24,8 @@ import sys
 import threading
 import time as tempo
 import traceback
+import urllib.parse
+import urllib.request
 from datetime import date, datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlencode, urlsplit
@@ -53,6 +55,136 @@ PUBBLICO = os.getenv("GEX_PUBBLICO") == "1"
 SOLA_LETTURA = PUBBLICO and not PASSWORD   # aperto a tutti: nessuno puo' far partire scarichi
 
 blocco = threading.Lock()
+
+
+# --- controllo dei feed -----------------------------------------------------------------
+# Ogni scarico segna se il CBOE ha risposto. Dopo SOGLIA_ERRORI errori di fila (circa 5-10 minuti
+# in sessione) c'e' un problema: banner rosso su tutte le pagine, /stato risponde 503 (per un
+# monitor esterno come UptimeRobot) e, se GEX_TELEGRAM_TOKEN e' impostata, arriva un messaggio dal bot Telegram.
+# /health resta sempre 200: lo usa Railway per riavviare il servizio, e riavviare non sistema un feed bloccato.
+
+SOGLIA_ERRORI = 3
+STALE_MIN = 20                       # in sessione, minuti senza nessun dato nuovo
+RIAVVISO = 3600                      # secondi fra due notifiche dello stesso problema
+TG_TOKEN = os.getenv("GEX_TELEGRAM_TOKEN", "")   # il token del bot, da @BotFather
+TG_CHAT = os.getenv("GEX_TELEGRAM_CHAT", "")     # facoltativo: se manca si usa la prima chat che ha scritto al bot
+blocco_feed = threading.Lock()
+
+
+def leggi_feed() -> dict:
+    p = g.DATI / "feed.json"
+    try:
+        return json.loads(p.read_text()) if p.exists() else {}
+    except ValueError:
+        return {}
+
+
+def scrivi_feed(f: dict) -> None:
+    g.DATI.mkdir(parents=True, exist_ok=True)
+    tmp = g.DATI / "feed.tmp"
+    tmp.write_text(json.dumps(f, indent=1))
+    tmp.replace(g.DATI / "feed.json")
+
+
+def _tg(metodo: str, dati: dict) -> dict:
+    req = urllib.request.Request(f"https://api.telegram.org/bot{TG_TOKEN}/{metodo}",
+                                 data=urllib.parse.urlencode(dati).encode(), method="POST")
+    with urllib.request.urlopen(req, timeout=10) as r:
+        return json.loads(r.read())
+
+
+def chat_telegram() -> str | None:
+    """La chat a cui scrivere: quella impostata, oppure la prima che ha scritto al bot (poi resta quella)."""
+    if TG_CHAT:
+        return TG_CHAT
+    f = leggi_feed()
+    if f.get("telegram_chat"):
+        return str(f["telegram_chat"])
+    for u in _tg("getUpdates", {"limit": 50}).get("result", []):
+        chat = (u.get("message") or {}).get("chat") or {}
+        if chat.get("id"):
+            with blocco_feed:
+                f = leggi_feed()
+                f["telegram_chat"] = chat["id"]
+                scrivi_feed(f)
+            return str(chat["id"])
+    return None
+
+
+def avvisa(testo: str) -> bool:
+    """Messaggio dal bot Telegram, solo se GEX_TELEGRAM_TOKEN e' impostata. Il testo non ha dati personali."""
+    if not TG_TOKEN:
+        return False
+    try:
+        chat = chat_telegram()
+        if not chat:
+            print("telegram: nessuna chat. Scrivi un messaggio qualsiasi al bot, poi aspetta il prossimo avviso.", flush=True)
+            return False
+        _tg("sendMessage", {"chat_id": chat, "text": f"GEX SPX: {testo}"})
+        return True
+    except Exception as err:
+        print(f"messaggio telegram non inviato: {str(err).replace(TG_TOKEN, '***')}", flush=True)
+        return False
+
+
+def segna_feed(quale: str, ok: bool, msg: str = "") -> None:
+    ora = tempo.time()
+    testo = None
+    with blocco_feed:
+        f = leggi_feed()
+        v = f.get(quale, {})
+        if ok:
+            if v.get("fails", 0) >= SOGLIA_ERRORI:
+                testo = f"Feed CBOE ({quale}) di nuovo attivo."
+            v.update(ok_t=ora, fails=0, primo_errore=None, avvisato_t=None)
+        else:
+            v["fails"] = v.get("fails", 0) + 1
+            v["primo_errore"] = v.get("primo_errore") or ora
+            v["err_t"], v["errore"] = ora, msg[:200]
+            if v["fails"] >= SOGLIA_ERRORI and ora - (v.get("avvisato_t") or 0) > RIAVVISO:
+                v["avvisato_t"] = ora
+                da = datetime.fromtimestamp(v["primo_errore"], g.ROMA)
+                testo = f"Feed CBOE ({quale}) in errore dalle {da:%H:%M} a Roma: {v['errore']}"
+        f[quale] = v
+        scrivi_feed(f)
+    if testo and not avvisa(testo) and not ok and TG_TOKEN:
+        with blocco_feed:   # non inviato: al prossimo errore riprova, senza aspettare un'ora
+            f = leggi_feed()
+            f.setdefault(quale, {})["avvisato_t"] = None
+            scrivi_feed(f)
+
+
+def segna_nuovo_dato() -> None:
+    with blocco_feed:
+        f = leggi_feed()
+        f.setdefault("live", {})["nuovo_t"] = tempo.time()
+        scrivi_feed(f)
+
+
+def problema_feed(adesso: datetime | None = None) -> str | None:
+    """Il testo del problema attuale, o None se i feed vanno."""
+    adesso = adesso or datetime.now(g.ROMA)
+    f = leggi_feed()
+    testi = []
+    for quale in ("opzioni", "barre"):
+        v = f.get(quale, {})
+        if v.get("fails", 0) >= SOGLIA_ERRORI:
+            da = datetime.fromtimestamp(v["primo_errore"], g.ROMA)
+            buono = f" Ultimo dato buono alle {datetime.fromtimestamp(v['ok_t'], g.ROMA):%H:%M} del {datetime.fromtimestamp(v['ok_t'], g.ROMA):%d/%m}." \
+                if v.get("ok_t") else ""
+            testi.append(f"Feed CBOE ({quale}) in errore dalle {da:%H:%M} del {da:%d/%m} (Roma), {v['fails']} tentativi di fila: "
+                         f"{v.get('errore', '')}.{buono}")
+    ny = adesso.astimezone(g.NY)
+    m = ny.hour * 60 + ny.minute
+    nuovo = f.get("live", {}).get("nuovo_t")
+    if (LIVE and not testi and nuovo and ny.weekday() < 5 and LIVE_ORARIO[0] + STALE_MIN <= m < LIVE_ORARIO[1]
+            and tempo.time() - nuovo > STALE_MIN * 60):
+        testi.append(f"Nessun dato live nuovo da {round((tempo.time() - nuovo) / 60)} minuti, anche se i feed rispondono: "
+                     "il CBOE potrebbe non aggiornare, o lo scheduler essersi fermato.")
+    return " ".join(testi) or None
+
+
+g.ESITO = segna_feed
 
 
 # --- scatti ---------------------------------------------------------------------------
@@ -102,6 +234,8 @@ def scatto_live(sym: str) -> str:
         if not g.in_sessione(an["ts_ny"]):
             return f"dato CBOE fuori sessione ({an['ts_ny']:%Y-%m-%d %H:%M} NY)"
         nuovo = storico.registra_live(an, payload)
+        if nuovo:
+            segna_nuovo_dato()
         return f"{an['ts_ny']:%H:%M} NY {'registrato' if nuovo else 'gia presente, CBOE non aggiornata'}"
 
 
@@ -409,7 +543,9 @@ def pagina_storico() -> str:
 
 def html_pagina(filtri: str, avvisi: list[str], stato: str, corpo: str, sym: str = "",
                 titolo: str = "GEX 0DTE", testa: str = "") -> str:
-    box = "".join(f'<section class="pan avviso">{e(a)}</section>' for a in avvisi)
+    problema = problema_feed()
+    box = (f'<section class="pan avviso"><b>Problema con i dati CBOE.</b> {e(problema)}</section>' if problema else "")
+    box += "".join(f'<section class="pan avviso">{e(a)}</section>' for a in avvisi)
     visibili = [s for s in g.INDICI if s in AUTOMATICI or s == sym or scarichi(s)]
     schede = " &middot; ".join(f"<b>{s}</b>" if s == sym else f'<a href="/?i={s}">{s}</a>' for s in visibili)
     return f"""<!doctype html><html lang="it"><head><meta charset="utf-8">{testa}
@@ -832,6 +968,9 @@ class Gestore(BaseHTTPRequestHandler):
         url = urlsplit(self.path)
         if url.path == "/health":
             return self.rispondi(200, "ok", "text/plain")
+        if url.path == "/stato":
+            problema = problema_feed()
+            return self.rispondi(503 if problema else 200, problema or "ok", "text/plain; charset=utf-8")
         if not self.autorizzato():
             return
         try:
