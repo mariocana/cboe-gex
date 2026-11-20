@@ -45,8 +45,13 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-URL = "https://cdn.cboe.com/api/global/delayed_quotes/options/_{}.json"
-URL_BARRE = "https://cdn.cboe.com/api/global/delayed_quotes/charts/intraday/_{}.json"
+# Dal 20/11/2026 il feed cdn.cboe.com rimanda a cdn-api.cboe.com, che risponde 403 agli script.
+# Il sito del CBOE ha un'alternativa (www-api.cboe.com, stesso formato): si prova prima quella,
+# poi gli indirizzi cdn-api. Se anche tutti falliscono, l'errore e' quello del primo indirizzo.
+URL = ["https://www-api.cboe.com/delayed_quote/api/v2/options/%5E{}",
+       "https://cdn-api.cboe.com/api/global/delayed_quotes/options/_{}.json"]
+URL_BARRE = ["https://www-api.cboe.com/delayed_quote/api/v2/chart/%5E{}/intraday",
+             "https://cdn-api.cboe.com/api/global/delayed_quotes/charts/intraday/_{}.json"]
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36"
 OPTION_RE = re.compile(r"^([A-Z]+)(\d{6})([CP])(\d{8})$")
 NY = ZoneInfo("America/New_York")
@@ -71,13 +76,27 @@ def _get(url: str) -> dict:
         return json.loads(r.read())
 
 
+def _get_uno(indirizzi: list[str], sym: str) -> dict:
+    primo = None
+    for url in indirizzi:
+        try:
+            payload = _get(url.format(sym))
+        except Exception as err:
+            primo = primo or err
+            continue
+        if payload.get("success", True) and payload.get("data"):
+            return payload
+        primo = primo or ValueError(f"risposta vuota da {url.split('/')[2]}")
+    raise primo
+
+
 def scarica(sym: str = "SPX") -> dict:
-    return _get(URL.format(sym))
+    return _get_uno(URL, sym)
 
 
 def scarica_barre(sym: str) -> dict:
     """Barre a 1 minuto dell'ultima sessione cash (orario di New York)."""
-    return _get(URL_BARRE.format(sym))
+    return _get_uno(URL_BARRE, sym)
 
 
 def indice_di(payload: dict) -> str:

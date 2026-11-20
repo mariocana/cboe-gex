@@ -14,6 +14,13 @@ per mezz'ora; le barre mancate si recuperano allo scatto del mattino dopo.
 L'esito di ogni scatto è nella pagina, sotto "Scatti automatici". Nei giorni di borsa USA
 chiusa gli scatti girano lo stesso e salvano la catena invariata.
 
+## Fonte dei dati
+
+Dal 20/11/2026 il feed `cdn.cboe.com` rimanda a `cdn-api.cboe.com`, che risponde 403 agli script.
+Il sito del CBOE ha un'alternativa con lo stesso formato, `www-api.cboe.com/delayed_quote/api/v2/options/%5ESPX`:
+`scarica_gex.py` prova prima quella e poi gli indirizzi `cdn-api`. Le barre a 1 minuto usano `.../chart/%5ESPX/intraday`
+(non ancora verificato: se lo scatto delle 22:20 fallisce, controllare l'indirizzo e la forma della risposta).
+
 ## Live ogni 5 minuti
 
 In sessione (9:45–16:15 a New York, di solito 15:45–22:15 a Roma) la catena SPX si riscarica
