@@ -28,6 +28,15 @@ quelli da mettere su Deepcharts restano gli scatti del mattino e delle 15:47.
 Del live si tengono solo i numeri (tabelle `live` e `live_profilo`, CSV su `/live.csv`), non il
 JSON grezzo: sarebbero 2 MB ogni 5 minuti. `GEX_LIVE=0` lo spegne.
 
+## Replay
+
+La pagina `/replay` rivede una giornata già salvata (dall'11/11 in poi), minuto per minuto: candele ES
+(SPX a 1 minuto più l'offset) e livelli del dato live, con play a 1x-120x, cursore, tasti ±1/±5 minuti
+e, di default, i livelli in ritardo di 15 minuti come nel live vero. Accanto al grafico, regime e
+distanza dal prezzo di ogni livello. Si apre su un orario con `?d=2026-11-18&t=10:26` (ora di New York).
+Serve il giorno intero: scatti live e barre a 1 minuto, queste ultime salvate alle 22:20 Roma.
+In locale: `GEX_DATI=cartella-con-gex.db GEX_LIVE=0 python3 app.py`, poi `http://127.0.0.1:8000/replay`.
+
 ## Storico
 
 Ogni scatto finisce in due posti, nella stessa cartella dati:

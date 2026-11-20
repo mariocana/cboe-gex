@@ -595,7 +595,7 @@ def pagina_live(q: dict) -> str:
               f'<form method="get" class="filtri"><label>Giorno<select name="d" onchange="this.form.submit()">{opz}</select></label>'
               f'<noscript><button type="submit">Mostra</button></noscript></form>'
               f'<div style="display:flex;gap:10px;align-items:center"><a href="/">Livelli</a><a href="/storico">Storico</a>'
-              f'<a href="/live.csv">CSV</a></div></div><p class="nota">{e(spiega)}</p>')
+              f'<a href="/replay">Replay</a><a href="/live.csv">CSV</a></div></div><p class="nota">{e(spiega)}</p>')
     oggi = giorno == f"{ora_ny:%Y-%m-%d}"
     auto = attivo and (oggi or not giorni)
     testa = ('<script>addEventListener("DOMContentLoaded",()=>{const c=document.getElementById("cd"),'
@@ -646,6 +646,156 @@ def pagina_live(q: dict) -> str:
     return html_pagina(filtri, [], "", "".join(corpo), "SPX", "GEX live", testa)
 
 
+# --- replay ----------------------------------------------------------------------------
+
+REPLAY_JS = r"""
+(function(){
+const D=__DATI__, DR=__DR__, T0=__T0__;
+const hm=s=>(+s.slice(0,2))*60+(+s.slice(3,5));
+const fmt=m=>String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+const live=D.live.map(r=>Object.assign({m:hm(r.ora_ny)},r));
+const barre=D.barre.map(b=>({m:hm(b[0]),o:b[1],h:b[2],l:b[3],c:b[4]}));
+const LV=[["flip","flip","#f0c040",0],["gamma_max","gamma max","#4caf50",0],["put_max","put piu' forte","#d76ad0",0],
+ ["c1","C1","#7bc67e",1],["c2","C2","#7bc67e",1],["c3","C3","#7bc67e",1],["p1","P1","#e8837f",1],["p2","P2","#e8837f",1],["p3","P3","#e8837f",1]];
+const A=570, B=960, PASSO=5, RITARDO=15;
+const cv=document.getElementById("rp-cv"), ctx=cv.getContext("2d");
+const sl=document.getElementById("rp-sl"), ora=document.getElementById("rp-ora");
+const btnPlay=document.getElementById("rp-play"), vel=document.getElementById("rp-vel"), rit=document.getElementById("rp-rit");
+let T=Math.max(A,Math.min(B-1,T0)), play=false, last=0;
+
+function livello(t){const d=rit.checked?RITARDO:0;let r=null;for(const x of live){if(x.m+d<=t)r=x;else break}return r}
+function barreFino(t){const o=[];for(const b of barre){if(b.m<=t)o.push(b);else break}return o}
+
+function disegna(){
+  const dpr=window.devicePixelRatio||1, W=cv.clientWidth, H=cv.clientHeight;
+  if(cv.width!==Math.round(W*dpr)||cv.height!==Math.round(H*dpr)){cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr)}
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);
+  const t=Math.floor(T), bs=barreFino(t), r=livello(t);
+  const off=(r?r.offset:(live[0]?live[0].offset:0))||0;
+  const ml=8, mr=118, mt=10, mb=34, pw=W-ml-mr, ph=H-mt-mb;
+  const X=m=>ml+(m-A)/(B-A)*pw;
+  if(!bs.length){ctx.fillStyle="#9aa3ad";ctx.font="13px Helvetica";ctx.fillText("Nessuna barra a questo orario",ml+10,mt+20);pannello(null,r,off);return}
+  let lo=Infinity,hi=-Infinity;for(const b of bs){lo=Math.min(lo,b.l+off);hi=Math.max(hi,b.h+off)}
+  const px=bs[bs.length-1].c+off;
+  if(hi-lo<40){const c=(hi+lo)/2;lo=c-20;hi=c+20}
+  lo-=12;hi+=12;
+  const lvs=[];
+  if(r)for(const [k,n,c,tr] of LV){if(r[k]!=null)lvs.push({k,n,c,tr,p:r[k]+off})}
+  for(const l of lvs){if(l.p>=lo-25&&l.p<=hi+25){lo=Math.min(lo,l.p-3);hi=Math.max(hi,l.p+3)}}
+  const Y=p=>mt+(hi-p)/(hi-lo)*ph;
+  ctx.font="11px Helvetica";ctx.textBaseline="middle";
+  const passoG=(hi-lo)>150?50:(hi-lo)>60?20:10;
+  ctx.strokeStyle="#262a31";ctx.fillStyle="#6b737d";ctx.lineWidth=1;ctx.setLineDash([]);
+  for(let g=Math.ceil(lo/passoG)*passoG;g<=hi;g+=passoG){const y=Y(g);ctx.beginPath();ctx.moveTo(ml,y);ctx.lineTo(ml+pw,y);ctx.stroke()}
+  ctx.textAlign="center";ctx.textBaseline="top";
+  for(let m=A;m<=B;m+=30){const x=X(m);ctx.strokeStyle="#262a31";ctx.beginPath();ctx.moveTo(x,mt);ctx.lineTo(x,mt+ph);ctx.stroke();
+    ctx.fillStyle="#9aa3ad";ctx.fillText(fmt(m+DR),x,mt+ph+4);ctx.fillStyle="#5d6570";ctx.fillText(fmt(m)+" NY",x,mt+ph+17)}
+  const bw=Math.max(1,pw/(B-A)*0.8);
+  for(const b of bs){const x=X(b.m)+bw/2, su=b.c>=b.o;ctx.strokeStyle=ctx.fillStyle=su?"#4caf50":"#e05555";
+    ctx.beginPath();ctx.moveTo(x,Y(b.h+off));ctx.lineTo(x,Y(b.l+off));ctx.stroke();
+    const y1=Y(Math.max(b.o,b.c)+off), y2=Y(Math.min(b.o,b.c)+off);ctx.fillRect(x-bw/2,y1,bw,Math.max(1,y2-y1))}
+  // livelli: linee e etichette a destra
+  const vis=lvs.filter(l=>l.p>=lo&&l.p<=hi).sort((a,b)=>b.p-a.p);
+  let yp=-99;
+  for(const l of vis){const y=Y(l.p);ctx.strokeStyle=l.c;ctx.lineWidth=l.tr?1:1.6;ctx.setLineDash(l.tr?[5,4]:[]);
+    ctx.beginPath();ctx.moveTo(ml,y);ctx.lineTo(ml+pw,y);ctx.stroke();
+    let yl=Math.max(y,yp+12);yp=yl;ctx.setLineDash([]);ctx.fillStyle=l.c;ctx.textAlign="left";ctx.textBaseline="middle";
+    ctx.fillText(l.n+" "+l.p.toFixed(1),ml+pw+6,yl)}
+  // prezzo
+  const yP=Y(px);ctx.setLineDash([2,3]);ctx.strokeStyle="#5aa9e6";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(ml,yP);ctx.lineTo(ml+pw,yP);ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle="#5aa9e6";ctx.fillRect(ml+pw+2,yP-8,mr-6,16);ctx.fillStyle="#0b1b2a";ctx.textAlign="left";ctx.fillText(px.toFixed(2),ml+pw+6,yP);
+  // cursore del tempo
+  const xt=X(t+1);ctx.strokeStyle="#3a414b";ctx.beginPath();ctx.moveTo(xt,mt);ctx.lineTo(xt,mt+ph);ctx.stroke();
+  pannello(px,r,off,lvs);
+}
+
+function pannello(px,r,off,lvs){
+  const t=Math.floor(T);
+  ora.textContent=fmt(t+DR)+" Roma  ·  "+fmt(t)+" New York";
+  sl.value=t;
+  const el=id=>document.getElementById(id);
+  if(px==null){return}
+  let reg="n.d.";
+  if(r&&r.flip!=null){const f=r.flip+off;reg=px>f+PASSO?"gamma positivo":px<f-PASSO?"gamma negativo":"gamma flip"}
+  el("rp-px").textContent=px.toFixed(2);el("rp-reg").textContent=reg;
+  el("rp-liv").textContent=r?(fmt(r.m+DR)+" Roma"+(r.m<600?" (instabile)":"")):"nessuno ancora";
+  el("rp-off").textContent=(off>=0?"+":"")+off;
+  const tb=el("rp-tb");
+  if(!r){tb.innerHTML="<tr><td colspan=3 style='color:#9aa3ad'>Il primo livello arriva circa alle "+fmt(live[0]?live[0].m+(rit.checked?RITARDO:0)+DR:0)+" Roma.</td></tr>";return}
+  let h="";
+  const ord=lvs.slice().sort((a,b)=>b.p-a.p);
+  let vicino=null,dm=1e9;for(const l of ord){const d=Math.abs(l.p-px);if(d<dm){dm=d;vicino=l}}
+  for(const l of ord){const d=l.p-px;
+    h+="<tr"+(l===vicino?" style='background:#232a33'":"")+"><td style='color:"+l.c+"'>"+l.n+"</td><td class='n'>"+l.p.toFixed(2)+"</td><td class='n'>"+(d>=0?"+":"")+d.toFixed(1)+"</td></tr>"}
+  tb.innerHTML=h;
+}
+
+function vai(t){T=Math.max(A,Math.min(B-1,t));disegna()}
+function tick(ts){
+  if(play){const dt=(ts-last)/1000;T+=dt*(+vel.value)/60;if(T>=B-1){T=B-1;play=false;btnPlay.textContent="Play"}disegna()}
+  last=ts;requestAnimationFrame(tick)}
+btnPlay.onclick=()=>{play=!play;btnPlay.textContent=play?"Pausa":"Play";if(T>=B-1&&play)T=A};
+sl.oninput=()=>{T=+sl.value;disegna()};
+rit.onchange=disegna;
+for(const [id,d] of [["rp-m5",-5],["rp-m1",-1],["rp-p1",1],["rp-p5",5]])document.getElementById(id).onclick=()=>{play=false;btnPlay.textContent="Play";vai(Math.floor(T)+d)};
+addEventListener("keydown",e=>{if(e.target.tagName==="SELECT")return;
+  if(e.key===" "){e.preventDefault();btnPlay.click()}else if(e.key==="ArrowRight"){vai(Math.floor(T)+(e.shiftKey?5:1))}else if(e.key==="ArrowLeft"){vai(Math.floor(T)-(e.shiftKey?5:1))}});
+addEventListener("resize",disegna);
+sl.min=A;sl.max=B-1;disegna();requestAnimationFrame(tick);
+})();
+"""
+
+
+def pagina_replay(q: dict) -> str:
+    giorni = storico.live_giorni()
+    giorno = q.get("d", [giorni[0] if giorni else ""])[0]
+    if giorno not in giorni:
+        giorno = giorni[0] if giorni else ""
+    opz = "".join(f'<option value="{d}"{" selected" if d == giorno else ""}>{GIORNI[date.fromisoformat(d).weekday()]} '
+                  f'{date.fromisoformat(d):%d/%m/%Y}</option>' for d in giorni[:60])
+    filtri = (f'<div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:end">'
+              f'<form method="get" class="filtri"><label>Giorno<select name="d" onchange="this.form.submit()">{opz}</select></label>'
+              f'<noscript><button type="submit">Mostra</button></noscript></form>'
+              f'<div style="display:flex;gap:10px;align-items:center"><a href="/live">Live</a><a href="/">Livelli</a>'
+              f'<a href="/storico">Storico</a></div></div>')
+    if not giorno:
+        return html_pagina(filtri, ["Nessuna giornata live salvata."], "", "", "SPX", "GEX replay")
+    dati = storico.replay_giorno(giorno)
+    if not dati["barre"] or not dati["live"]:
+        return html_pagina(filtri, [f"Il {giorno} manca di barre a 1 minuto o di scatti live: non si puo' rivedere."],
+                           "", "", "SPX", "GEX replay")
+    mezzo = datetime.fromisoformat(giorno + "T12:00:00").replace(tzinfo=g.NY)
+    diff = int((mezzo.astimezone(g.ROMA).replace(tzinfo=None) - mezzo.replace(tzinfo=None)).total_seconds() // 60)
+    try:
+        t0 = int(q.get("t", ["10:01"])[0][:2]) * 60 + int(q.get("t", ["10:01"])[0][3:5])
+    except ValueError:
+        t0 = 10 * 60 + 1
+    js = (REPLAY_JS.replace("__DATI__", json.dumps(dati).replace("</", "<\\/"))
+          .replace("__DR__", str(diff)).replace("__T0__", str(t0)))
+    corpo = f"""<section class="pan">
+<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px">
+<button id="rp-play" class="primo">Play</button>
+<button id="rp-m5" title="indietro 5 minuti">&minus;5</button><button id="rp-m1" title="indietro 1 minuto">&minus;1</button>
+<button id="rp-p1" title="avanti 1 minuto">+1</button><button id="rp-p5" title="avanti 5 minuti">+5</button>
+<label>Velocita'<select id="rp-vel"><option value="1">1x (1 minuto al minuto)</option><option value="5">5x</option>
+<option value="10">10x</option><option value="30" selected>30x</option><option value="60">60x (1 minuto al secondo)</option>
+<option value="120">120x</option></select></label>
+<label class="riga"><input type="checkbox" id="rp-rit" checked> livelli in ritardo di 15 minuti, come nel live vero</label>
+<b id="rp-ora" style="margin-left:auto"></b></div>
+<input type="range" id="rp-sl" style="width:100%" min="570" max="959" step="1" value="601">
+<canvas id="rp-cv" style="width:100%;height:480px;display:block;margin-top:8px"></canvas>
+<p class="nota">Prezzo ES stimato = SPX a 1 minuto + offset dello scatto. Orari sull'asse: Roma, sotto New York.
+I livelli sono a gradini: valgono fino al dato successivo. Tasti: spazio = play, frecce = 1 minuto (con maiusc 5).</p></section>
+<div class="due"><section class="pan dati">
+<div><b id="rp-px">-</b><span>ES stimato</span></div><div><b id="rp-reg">-</b><span>regime (prezzo contro flip)</span></div>
+<div><b id="rp-liv">-</b><span>ora del dato CBOE dei livelli</span></div><div><b id="rp-off">-</b><span>offset ES&minus;SPX</span></div></section>
+<section class="pan"><h2>Livelli e distanza dal prezzo</h2><div class="scorri"><table>
+<tr><th>Livello</th><th>Prezzo ES</th><th>Distanza</th></tr><tbody id="rp-tb"></tbody></table></div>
+<p class="nota">In evidenza il piu' vicino. Gli scatti prima delle 10:00 a New York sono instabili.</p></section></div>
+<script>{js}</script>"""
+    return html_pagina(filtri, [], "", corpo, "SPX", "GEX replay")
+
+
 # --- server ---------------------------------------------------------------------------
 
 class Gestore(BaseHTTPRequestHandler):
@@ -691,6 +841,8 @@ class Gestore(BaseHTTPRequestHandler):
                 self.rispondi(200, pagina_storico())
             elif url.path == "/live":
                 self.rispondi(200, pagina_live(parse_qs(url.query)))
+            elif url.path == "/replay":
+                self.rispondi(200, pagina_replay(parse_qs(url.query)))
             elif url.path == "/live.csv":
                 self.rispondi(200, storico.csv_live(), "text/csv; charset=utf-8",
                               {"Content-Disposition": 'attachment; filename="gex_live.csv"'})

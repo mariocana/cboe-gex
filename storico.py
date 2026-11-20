@@ -161,6 +161,20 @@ def live_del_giorno(giorno: str, sym: str = "SPX") -> list[dict]:
     return righe
 
 
+def replay_giorno(giorno: str, sym: str = "SPX") -> dict:
+    """Dati per rivedere una giornata: scatti live (livelli in strike, con offset) e barre a 1 minuto."""
+    db = apri()
+    db.row_factory = sqlite3.Row
+    live = [dict(r) for r in db.execute(
+        """SELECT ts_utc, ora_ny, spot, offset, regime, flip, gamma_max, put_max, c1, c2, c3, p1, p2, p3,
+                  netto_totale, straddle FROM live WHERE indice = ? AND data_ny = ? ORDER BY ts_utc""", (sym, giorno))]
+    barre = [list(r) for r in db.execute(
+        """SELECT substr(ts_ny, 12, 5), open, high, low, close FROM barre
+           WHERE indice = ? AND substr(ts_ny, 1, 10) = ? ORDER BY ts_ny""", (sym, giorno))]
+    db.close()
+    return {"giorno": giorno, "live": live, "barre": barre}
+
+
 def csv_live() -> str:
     db = apri()
     cur = db.execute("""SELECT indice, data_ny, ora_ny, ts_utc, spot, offset, scadenza, regime,
